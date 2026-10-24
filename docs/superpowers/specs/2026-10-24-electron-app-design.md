@@ -21,9 +21,8 @@ JQL mapping, because that's where people will get confused.
 - **Distribution:** a **public** repo on Fin's GitHub (`findoo`; repo name *my call*: `shortcut-for-orca`), with
   Releases; each release has a `.dmg`. Public repos get free macOS Actions minutes.
 - **Unsigned** (Fin's decision). No Apple Developer ID signing or notarisation.
-- **Assumption (Fin's):** engineers can install and open unsigned apps. managed Macs are MDM-managed and users
-  aren't admins, but there's a way to get temporary admin access, which is assumed to be enough. The install
-  instructions should mention it ("you may need temporary admin access to copy it into Applications and open it
+- **Assumption (Fin's):** users can install unsigned apps, possibly with temporary admin access (assumed to be
+  enough). The install instructions should mention it ("you may need temporary admin access to copy it into Applications and open it
   the first time"). If this turns out wrong, it's a new decision (IT allowlist or signing), not a builder fix.
 
 ## Goals

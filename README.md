@@ -12,7 +12,7 @@ Drag **Shortcut for Orca** to Applications. You may need temporary admin access 
 
 ## First launch
 
-The app is unsigned, so macOS blocks it the first time. On macOS 15+, open System Settings → Privacy & Security and click **Open Anyway**. Or run:
+The app is unsigned, so macOS blocks it the first time. Try to open it once first (macOS only offers the override after a blocked attempt), then open System Settings → Privacy & Security and click **Open Anyway**. Or run:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Shortcut for Orca.app"
@@ -22,7 +22,7 @@ Then follow the **Setup** tab in the app.
 
 ## Developer notes
 
-## Run
+### Run
 
 ```sh
 pnpm install
@@ -38,9 +38,8 @@ Releases: push a tag like `v0.1.0`; the GitHub Actions workflow builds and publi
 
 Settings → Integrations → Jira → **Self-hosted** → **Personal access token**:
 
-- Site URL: `http://localhost:8089`
-- Email/username: leave blank
-- Personal access token: your Shortcut API token (Shortcut → Settings → API Tokens)
+- Jira site URL: `http://localhost:8089`
+- Jira personal access token: your Shortcut API token (Shortcut → Settings → API Tokens)
 
 The proxy stores nothing. It forwards Orca's token to Shortcut on each request and binds to `127.0.0.1` only.
 
