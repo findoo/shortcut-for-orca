@@ -1,6 +1,4 @@
-// Set before any Date is made: whole-day matches must follow local midnights, which aren't always 24h apart.
-process.env.TZ = 'Europe/London';
-
+// jest.config.js pins TZ to Europe/London. Whole-day matches must follow local midnights, which aren't always 24h apart.
 import { lookups, stories } from './fixtures.ts';
 import { compileJql } from './jql.ts';
 

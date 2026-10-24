@@ -2,6 +2,17 @@
 
 A small macOS app that lets [Orca](https://github.com/stablyai/orca)'s Jira integration work with Shortcut. It runs a local server that speaks the subset of the Jira Server REST API Orca uses and calls Shortcut live. No sync and no database: reads and writes go straight to Shortcut.
 
+## Why?
+
+Orca can show your issue tracker's tasks next to your worktrees, but it supports Jira, Linear and GitHub, not
+Shortcut. Of those, only Jira can be pointed at your own server: Orca connects to self-hosted Jira by URL, while Linear
+and GitHub are hard-wired to their own services. So this app pretends to be a small self-hosted Jira that answers from
+Shortcut, and Orca's Jira integration (task list, details, comments, assigning, status changes, creating stories) works
+with your Shortcut stories.
+
+It runs on your Mac rather than as a shared service, so your Shortcut token goes from Orca straight to Shortcut: the
+app never stores it, and nothing is synced or kept anywhere else.
+
 ## Download
 
 Get the latest `.dmg` from [Releases](https://github.com/findoo/shortcut-for-orca/releases): `arm64` for Apple Silicon, `x64` for Intel Macs.
