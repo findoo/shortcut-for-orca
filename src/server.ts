@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   ISSUE_TYPES,
   POINTS_FIELD,
@@ -30,7 +30,6 @@ import {
   type Workflow,
 } from './shortcut.ts';
 
-const PORT = Number(process.env.PORT ?? 8089);
 let workspaceSlug = process.env.SHORTCUT_WORKSPACE ?? '';
 
 class HttpError extends Error {
@@ -410,49 +409,104 @@ async function readJson(req: IncomingMessage): Promise<Json> {
   }
 }
 
-function send(res: ServerResponse, status: number, body: unknown) {
-  if (body === null || body === undefined) {
-    res.writeHead(204).end();
-    return;
-  }
-  res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+export interface RequestEvent {
+  at: number;
+  method: string;
+  path: string;
+  status: number;
+  ms: number;
+  error?: string;
+}
+export type TokenAccess = 'read-write' | 'read-only' | 'unknown';
+export interface Identity {
+  name: string;
+  mention: string;
+  workspace: string;
+  access: TokenAccess;
+}
+export interface ProxyHooks {
+  onRequest?(e: RequestEvent): void;
+  onIdentity?(i: Identity): void;
 }
 
-export async function handle(req: IncomingMessage, res: ServerResponse) {
+export function tokenAccess(token: string): TokenAccess {
+  return token.startsWith('sct_rw_') ? 'read-write' : token.startsWith('sct_ro_') ? 'read-only' : 'unknown';
+}
+
+const lastIdentity = new WeakMap<ProxyHooks, string>();
+
+async function emitIdentity(hooks: ProxyHooks, token: string, access: TokenAccess) {
+  if (!hooks.onIdentity) return;
+  try {
+    const l = await lookups(token);
+    const identity: Identity = {
+      name: l.members.get(l.me.id)?.profile.name ?? l.me.name,
+      mention: l.me.mention_name,
+      workspace: l.me.workspace2.url_slug,
+      access,
+    };
+    const key = JSON.stringify(identity);
+    if (lastIdentity.get(hooks) === key) return;
+    lastIdentity.set(hooks, key);
+    hooks.onIdentity(identity);
+  } catch {
+    // identity is best-effort; never fail the Jira response over it
+  }
+}
+
+interface Reply {
+  status: number;
+  body?: unknown;
+  location?: string;
+}
+
+export async function handle(req: IncomingMessage, res: ServerResponse, hooks: ProxyHooks = {}) {
+  const start = performance.now();
+  const at = Date.now();
+  const method = req.method ?? 'GET';
+  let path = req.url ?? '/';
+  let token: string | undefined;
+  let shortcutForbidden = false;
+  let reply: Reply;
   try {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    path = url.pathname;
     // Blocks DNS-rebinding: a web page can't reach this proxy under a hostname it controls.
     if (!LOCAL_HOSTS.has(url.hostname)) throw new HttpError(403, 'Forbidden host.');
-    const path = url.pathname.replace(/\/+$/, '');
-    for (const [method, pattern, handler] of routes) {
-      const m = method === req.method ? pattern.exec(path) : null;
-      if (!m) continue;
-      const body = req.method === 'GET' ? undefined : await readJson(req);
-      const result = (await handler({
-        token: () => tokenFrom(req),
-        params: m.slice(1).map(decodeURIComponent),
-        url,
-        body,
-      })) as Json;
-      if (result?.redirect) {
-        res.writeHead(302, { Location: result.redirect }).end();
-      } else if (result?.status && result.body) {
-        send(res, result.status, result.body);
-      } else {
-        send(res, 200, result);
+    const trimmed = path.replace(/\/+$/, '');
+    reply = await (async (): Promise<Reply> => {
+      for (const [m, pattern, handler] of routes) {
+        const match = m === method ? pattern.exec(trimmed) : null;
+        if (!match) continue;
+        const body = method === 'GET' ? undefined : await readJson(req);
+        const result = (await handler({
+          token: () => (token = tokenFrom(req)),
+          params: match.slice(1).map(decodeURIComponent),
+          url,
+          body,
+        })) as Json;
+        if (result?.redirect) return { status: 302, location: result.redirect };
+        if (result?.status && result.body) return { status: result.status, body: result.body };
+        return { status: 200, body: result };
       }
-      return;
-    }
-    throw new HttpError(404, `Not supported by the Shortcut proxy: ${req.method} ${path}`);
+      throw new HttpError(404, `Not supported by the Shortcut proxy: ${method} ${trimmed}`);
+    })();
   } catch (e) {
     const status = e instanceof HttpError || e instanceof ShortcutError ? e.status : e instanceof JqlError ? 400 : 500;
     if (status === 500) console.error(e);
-    send(res, status, { errorMessages: [e instanceof Error ? e.message : String(e)], errors: {} });
+    shortcutForbidden = e instanceof ShortcutError && status === 403 && method !== 'GET';
+    reply = { status, body: { errorMessages: [e instanceof Error ? e.message : String(e)], errors: {} } };
   }
+  // Resolved before replying so identity is visible by the time the client has its response.
+  if (token && reply.status < 400) await emitIdentity(hooks, token, tokenAccess(token));
+  else if (token && shortcutForbidden) await emitIdentity(hooks, token, 'read-only');
+  respond(res, reply);
+  const error = reply.status >= 400 ? (reply.body as { errorMessages?: string[] }).errorMessages?.[0] : undefined;
+  hooks.onRequest?.({ at, method, path, status: reply.status, ms: performance.now() - start, ...(error && { error }) });
 }
 
-if (process.argv[1] === import.meta.filename) {
-  createServer(handle).listen(PORT, '127.0.0.1', () => {
-    console.log(`Shortcut → Jira proxy on http://localhost:${PORT}`);
-  });
+function respond(res: ServerResponse, { status, body, location }: Reply) {
+  if (location) res.writeHead(status, { Location: location }).end();
+  else if (body === null || body === undefined) res.writeHead(204).end();
+  else res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
 }
