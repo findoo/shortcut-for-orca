@@ -1,0 +1,29 @@
+:root { color-scheme: light dark; --border: rgba(128, 128, 128, 0.35); --muted: rgba(128, 128, 128, 0.9); --accent: #0a84ff; }
+body { margin: 0; font: 13px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+nav { display: flex; gap: 4px; padding: 10px 16px 0; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: Canvas; }
+nav button { border: 0; background: none; font: inherit; color: inherit; padding: 6px 12px; border-bottom: 2px solid transparent; cursor: pointer; opacity: 0.7; }
+nav button.active { border-bottom-color: var(--accent); opacity: 1; font-weight: 600; }
+section { display: none; padding: 16px 24px 32px; max-width: 860px; }
+section.active { display: block; }
+h1, h2, h3 { margin: 1.2em 0 0.4em; }
+h1 { font-size: 20px; margin-top: 0; }
+h2 { font-size: 16px; }
+ol { padding-left: 20px; }
+li { margin-bottom: 14px; }
+.row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+code, pre { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: rgba(128, 128, 128, 0.15); padding: 1px 4px; border-radius: 4px; }
+pre { position: relative; background: rgba(128, 128, 128, 0.12); padding: 10px 70px 10px 12px; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+pre button { position: absolute; top: 6px; right: 6px; }
+button { font: inherit; padding: 3px 10px; }
+a { color: var(--accent); cursor: pointer; }
+.status { font-weight: 600; }
+.warn { color: #d97706; margin-top: 6px; }
+.err { color: #dc2626; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.path { word-break: break-all; }
+.muted { color: var(--muted); }
+#guide table { margin: 8px 0; }
+#guide td, #guide th { font-size: 12px; }

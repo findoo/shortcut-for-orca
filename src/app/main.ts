@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Identity, RequestEvent } from '../server.ts';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, validatePort } from './settings.ts';
 import { initialState, withIdentity, withProxy, withRequest, type AppState } from './state.ts';
@@ -67,6 +68,7 @@ function createWindow(): void {
     width: 920,
     height: 680,
     title: 'Shortcut for Orca',
+    show: !SMOKE,
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -74,12 +76,18 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
+  const page = path.join(__dirname, 'index.html');
+  // All external links go through window.app.openExternal; the window never navigates away from our page.
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url !== pathToFileURL(page).href) e.preventDefault();
+  });
   win.on('close', (e) => {
     if (quitting) return;
     e.preventDefault();
     win?.hide();
   });
-  void win.loadFile(path.join(__dirname, 'index.html'));
+  void win.loadFile(page);
 }
 
 function showWindow(): void {
@@ -88,13 +96,34 @@ function showWindow(): void {
   win.focus();
 }
 
+// Reads the hidden window's text (textContent, so inactive tabs count) and checks the expected copy is there.
+async function checkWindow(w: BrowserWindow): Promise<boolean> {
+  if (w.webContents.isLoading()) await new Promise<void>((r) => w.webContents.once('did-finish-load', () => r()));
+  let text = '';
+  for (let i = 0; i < 50 && !text; i++) {
+    text = String(
+      await w.webContents.executeJavaScript(`document.body.dataset.rendered === '1' ? document.body.textContent : ''`),
+    );
+    if (!text) await new Promise((r) => setTimeout(r, 100));
+  }
+  const expected = ['Setup', 'Status', 'JQL guide', 'Settings', 'http://localhost:8089', 'Waiting for Orca to connect', 'How queries run'];
+  let ok = true;
+  for (const want of expected) {
+    const found = text.includes(want);
+    ok &&= found;
+    console.log(`${found ? 'PASS' : 'FAIL'} window contains "${want}"`);
+  }
+  return ok;
+}
+
 async function smoke(): Promise<void> {
   if (state.proxy.state === 'running') {
     await fetch(`http://127.0.0.1:${state.proxy.port}/rest/api/2/myself`).catch(() => {});
   }
+  const windowOk = win ? await checkWindow(win).catch((err) => (console.log('FAIL window check:', message(err)), false)) : false;
   smokeDone = true;
   console.log(JSON.stringify(state));
-  app.exit(state.proxy.state === 'running' && state.log.length === 1 ? 0 : 1);
+  app.exit(state.proxy.state === 'running' && state.log.length === 1 && windowOk ? 0 : 1);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -129,7 +158,7 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     if (SMOKE) setTimeout(() => !smokeDone && app.exit(1), 15000).unref();
-    else createWindow();
+    createWindow();
     try {
       proxy = await startProxy(settings.port, hooks);
       update(withProxy(state, { state: 'running', port: proxy.port }));
