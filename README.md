@@ -20,6 +20,8 @@ xattr -dr com.apple.quarantine "/Applications/Shortcut for Orca.app"
 
 Then follow the **Setup** tab in the app.
 
+The app lives in the menu bar (the ⇄ icon), not the dock. Closing the window keeps it running; use the menu bar icon to reopen the window or quit.
+
 ## Developer notes
 
 ### Run

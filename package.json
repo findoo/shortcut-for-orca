@@ -18,6 +18,7 @@
     "build": "node scripts/build.mjs",
     "app": "pnpm build && electron .",
     "app:smoke": "pnpm build && SMOKE=1 electron .",
+    "icons": "electron scripts/icons.mjs",
     "dist": "pnpm build && electron-builder --mac dmg --arm64 --x64 --publish never"
   },
   "devDependencies": {

@@ -8,6 +8,8 @@ files:
 mac:
   category: public.app-category.developer-tools
   identity: "-"
+  extendInfo:
+    LSUIElement: true # menu bar app: no dock icon
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 publish:

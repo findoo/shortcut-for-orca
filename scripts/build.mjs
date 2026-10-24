@@ -8,4 +8,4 @@ await Promise.all([
   build({ ...common, entryPoints: ['src/app/preload.ts'], outfile: 'dist/preload.cjs', platform: 'node', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/app/renderer.ts'], outfile: 'dist/renderer.js', platform: 'browser', format: 'iife', loader: { '.md': 'text' } }),
 ]);
-for (const f of ['index.html', 'styles.css']) if (existsSync(`src/app/${f}`)) copyFileSync(`src/app/${f}`, `dist/${f}`);
+for (const f of ['index.html', 'styles.css', 'trayTemplate.png', 'trayTemplate@2x.png']) if (existsSync(`src/app/${f}`)) copyFileSync(`src/app/${f}`, `dist/${f}`);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Identity, RequestEvent } from '../server.ts';
@@ -10,15 +10,36 @@ const SMOKE = process.env.SMOKE === '1';
 const EXTERNAL = [/^https:\/\/app\.shortcut\.com\//, /^https:\/\/github\.com\/findoo\//];
 
 let win: BrowserWindow | undefined;
+let tray: Tray | undefined;
 let proxy: RunningProxy | undefined; // the one proxy that has not been closed yet
 let state: AppState;
 let settingsFile: string;
 let quitting = false;
 let smokeDone = false;
 
+function trayStatus(): string {
+  const p = state.proxy;
+  if (p.state === 'error') return `Not running: ${p.message}`;
+  if (p.state !== 'running') return 'Starting…';
+  return state.identity ? `Connected as ${state.identity.name}` : `Running on port ${p.port}`;
+}
+
+function updateTray(): void {
+  if (!tray) return;
+  tray.setTitle(state.proxy.state === 'error' ? '!' : ''); // the menu bar's version of a dock badge
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: trayStatus(), enabled: false },
+      { type: 'separator' },
+      { label: 'Open Shortcut for Orca…', click: showWindow },
+      { label: 'Quit', accelerator: 'Command+Q', click: () => app.quit() },
+    ]),
+  );
+}
+
 function update(next: AppState): void {
   state = next;
-  app.dock?.setBadge(state.proxy.state === 'error' ? '!' : '');
+  updateTray();
   if (win && !win.isDestroyed()) win.webContents.send('state:changed', state);
 }
 
@@ -68,7 +89,7 @@ function createWindow(): void {
     width: 920,
     height: 680,
     title: 'Shortcut for Orca',
-    // Launch at login starts quietly in the dock; clicking the dock icon shows the window.
+    // Launch at login starts quietly in the menu bar; the menu bar icon opens the window.
     show: !SMOKE && !app.getLoginItemSettings().wasOpenedAtLogin,
     webPreferences: {
       contextIsolation: true,
@@ -94,6 +115,7 @@ function createWindow(): void {
 function showWindow(): void {
   if (!win || win.isDestroyed()) return createWindow();
   win.show();
+  app.focus({ steal: true }); // menu bar apps aren't activated by showing a window
   win.focus();
 }
 
@@ -138,7 +160,7 @@ if (!app.requestSingleInstanceLock()) {
     proxy = undefined;
     void p?.close().catch(() => {});
   });
-  app.on('window-all-closed', () => {}); // stay alive in the dock; the proxy keeps serving
+  app.on('window-all-closed', () => {}); // stay alive in the menu bar; the proxy keeps serving
 
   void app.whenReady().then(async () => {
     settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -159,6 +181,10 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     if (SMOKE) setTimeout(() => !smokeDone && app.exit(1), 15000).unref();
+    app.dock?.hide(); // already hidden in the packaged app (LSUIElement); this covers `pnpm app`
+    tray = new Tray(path.join(__dirname, 'trayTemplate.png'));
+    tray.setToolTip('Shortcut for Orca');
+    updateTray();
     createWindow();
     try {
       proxy = await startProxy(settings.port, hooks);
