@@ -110,7 +110,7 @@ function withPriority(existing: StoryCustomField[], l: Lookups, valueId: string 
   return valueId ? [...rest, { field_id: l.priority.id, value_id: valueId }] : rest;
 }
 
-const idOf = (v: Json): string | null => (typeof v === 'string' ? v : (v?.id ?? v?.name ?? null));
+const idOf = (v: Json): string | null => (typeof v === 'string' ? v : (v?.id ?? v?.key ?? v?.name ?? null));
 
 // ponytail: Shortcut search can't sort, so each search reads at most its share of 20 pages (500 stories)
 // and stops once it has `max` matches; results are then sorted locally. Narrow the JQL if ordering looks off.
@@ -274,7 +274,9 @@ const routes: [string, RegExp, Handler][] = [
       if (typeof f.summary !== 'string' || !f.summary.trim()) throw new HttpError(400, 'Summary is required.');
       const l = await lookups(t);
       const g = findGroup(l.groups, idOf(f.project) ?? '');
-      const workflow = l.workflows.get((g && groupWorkflowIds(g)[0]) || l.me.workspace2.default_workflow_id);
+      // Never create a story without a team: it would vanish from the team's view in Orca.
+      if (!g) throw new HttpError(400, `Unknown project "${idOf(f.project) ?? ''}". Use a Shortcut team key such as WEB.`);
+      const workflow = l.workflows.get(groupWorkflowIds(g)[0] || l.me.workspace2.default_workflow_id);
       const states = [...(workflow?.states ?? [])].sort((a, b) => a.position - b.position);
       const state = states.find((s) => s.type === 'unstarted') ?? states[0];
       if (!state) throw new HttpError(400, 'Could not find a workflow state for this team.');
@@ -286,7 +288,7 @@ const routes: [string, RegExp, Handler][] = [
           name: f.summary.trim(),
           description: typeof f.description === 'string' ? f.description : undefined,
           story_type: type,
-          group_id: g?.id,
+          group_id: g.id,
           workflow_state_id: state.id,
           owner_ids: assignee ? [assignee] : undefined,
           custom_fields: priority ? withPriority([], l, priority) : undefined,
@@ -334,8 +336,13 @@ const routes: [string, RegExp, Handler][] = [
     'PUT',
     /^\/rest\/api\/2\/issue\/([^/]+)\/assignee$/,
     async ({ token, params, body }) => {
+      // Jira: {"name": "<user>"} assigns, {"name": null} unassigns. Anything else is rejected, never read as "unassign".
+      const field = ['name', 'accountId', 'key'].find((k) => body !== null && typeof body === 'object' && k in body);
+      const owner = field ? body[field] : undefined;
+      if (owner !== null && typeof owner !== 'string')
+        throw new HttpError(400, 'Send {"name": "<user id>"} to assign, or {"name": null} to unassign.');
+      if (owner && !(await lookups(token())).members.has(owner)) throw new HttpError(400, `Unknown user "${owner}".`);
       const s = await getStory(token(), params[0]);
-      const owner = idOf(body);
       await sc(token(), `/api/v3/stories/${s.id}`, { method: 'PUT', body: { owner_ids: owner ? [owner] : [] } });
       return null;
     },

@@ -318,7 +318,7 @@ function dateField(name: string, op: string, now: Date, get: (s: Story) => strin
     eq: (v) => {
       const { at, dayOnly } = parseDate(v, now);
       const start = at.getTime();
-      const end = dayOnly ? start + DAY : start + 1;
+      const end = dayOnly ? addUnit(at, 1, 'day').getTime() : start + 1; // next local midnight: days aren't always 24h
       return {
         desc: `${name} = ${v.kind === 'lit' ? v.text : 'date'}`,
         test: (s) => {

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 const BASE = 'https://api.app.shortcut.com';
 
@@ -157,7 +157,9 @@ export interface Image {
 // for a link to the proxy, which serves the cached copy without asking for the token.
 const MEDIA_URL = /https:\/\/media\.app\.shortcut\.com\/[^\s"'()<>\\]+/g;
 const MEDIA_LIMIT = 500; // ponytail: oldest-first eviction by count, not bytes; add a byte budget if memory bites
-const media = new Map<string, Promise<Image | null>>();
+// Ids are random per process, not derived from the URL: whoever knows an id can read the image without a token.
+const media = new Map<string, { url: string; image: Promise<Image | null> }>(); // id -> image
+const mediaIds = new Map<string, string>(); // Shortcut URL -> id
 
 function fetchMedia(token: string, url: string): Promise<Image | null> {
   return fetch(url, { headers: { 'Shortcut-Token': token } })
@@ -167,18 +169,27 @@ function fetchMedia(token: string, url: string): Promise<Image | null> {
     .catch(() => null);
 }
 
+function forget(id: string): void {
+  const entry = media.get(id);
+  media.delete(id);
+  if (entry && mediaIds.get(entry.url) === id) mediaIds.delete(entry.url);
+}
+
 /** Rewrites Shortcut media URLs in `text` to `${origin}/media/<id>` and starts fetching them. */
 export function localMedia(token: string, text: string, origin: string): string {
   return text.replace(MEDIA_URL, (url) => {
-    const id = createHash('sha256').update(url).digest('hex').slice(0, 32);
-    if (!media.has(id)) {
+    let id = mediaIds.get(url);
+    if (!id) {
+      const newId = randomBytes(16).toString('hex');
       const image = fetchMedia(token, url);
-      media.set(id, image);
-      void image.then((img) => img || (media.get(id) === image && media.delete(id))); // retry next time
-      if (media.size > MEDIA_LIMIT) media.delete(media.keys().next().value!);
+      media.set(newId, { url, image });
+      mediaIds.set(url, newId);
+      void image.then((img) => img || forget(newId)); // failed: fetch again next time it's seen
+      if (media.size > MEDIA_LIMIT) forget(media.keys().next().value!);
+      id = newId;
     }
     return `${origin}/media/${id}`;
   });
 }
 
-export const mediaFile = (id: string): Promise<Image | null> => media.get(id) ?? Promise.resolve(null);
+export const mediaFile = async (id: string): Promise<Image | null> => (await media.get(id)?.image) ?? null;
