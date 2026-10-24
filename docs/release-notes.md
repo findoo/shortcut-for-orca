@@ -1,3 +1,12 @@
+## What's new
+
+- **Menu bar app** with its own icon; it no longer sits in the dock.
+- **Images:** avatars and images in descriptions and comments now load in Orca.
+- **Jira favourites** in Orca: My open stories, Requested by me, Current sprint, open stories per team, plus your own
+  filters from Settings → Saved filters.
+- **Fixes:** a malformed assign request no longer unassigns; stories are never created without a team; whole-day date
+  matches are correct across daylight-saving changes.
+
 ## Opening the app the first time
 
 Shortcut for Orca is unsigned, so macOS blocks it on first launch.
