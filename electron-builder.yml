@@ -14,3 +14,6 @@ publish:
   provider: github
   owner: findoo
   repo: shortcut-for-orca
+  releaseType: release
+releaseInfo:
+  releaseNotesFile: docs/release-notes.md
