@@ -11,5 +11,5 @@ mac:
   extendInfo:
     LSUIElement: true # menu bar app: no dock icon
 dmg:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: Shortcut-for-Orca-${version}-${arch}.${ext} # no spaces: GitHub turns them into dots
 publish: null
