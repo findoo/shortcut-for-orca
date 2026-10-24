@@ -64,6 +64,12 @@ The proxy stores nothing. It forwards Orca's token to Shortcut on each request a
 
 See [docs/jql.md](docs/jql.md) for supported fields, operators, quirks and search limits (it is also shown in the app's *JQL guide* tab).
 
+## Saved filters and images
+
+Shortcut has no saved searches, so Orca's *Jira favourites* are presets plus your own filters from the app's Settings.
+Shortcut images (avatars, images in descriptions and comments) need your token, so the proxy fetches them while handling
+Orca's request and serves them from `localhost`; the token never appears in an image URL.
+
 ## Not supported
 
-Attachments/inline images, saved filters, editing descriptions, and editing custom fields other than Priority.
+Orca has no UI to edit descriptions, edit custom fields other than Priority, or upload attachments.

@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { ADA_ICON, lookups, stories } from './fixtures.ts';
+import { compileJql } from './jql.ts';
 import { MISSING_TOKEN_MESSAGE, handle, tokenAccess, type Identity, type RequestEvent } from './server.ts';
 
 const realFetch = global.fetch; // `call` talks to the proxy for real; Shortcut is mocked
@@ -37,7 +38,11 @@ beforeAll(async () => {
   jest
     .spyOn(global, 'fetch')
     .mockImplementation(async (input, init) => shortcut(String(input), init?.method ?? 'GET', init?.headers));
-  const hooks = { onRequest: (e: RequestEvent) => events.push(e), onIdentity: (i: Identity) => identities.push(i) };
+  const hooks = {
+    onRequest: (e: RequestEvent) => events.push(e),
+    onIdentity: (i: Identity) => identities.push(i),
+    filters: () => [{ name: 'Web bugs', jql: 'project = WEB AND type = bug' }],
+  };
   server = createServer((q, s) => void handle(q, s, hooks));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -113,18 +118,34 @@ it('never leaks the token', async () => {
   expect(JSON.stringify([events, identities])).not.toContain('LEAKCHECK');
 });
 
-it('serves Shortcut avatars from the proxy without a token', async () => {
-  const me = await (await call('/rest/api/2/myself', 'sct_rw_avatar')).json();
-  expect(me.avatarUrls['48x48']).toBe(`${base}/avatar/u1`);
+it('serves Shortcut media from the proxy without a token', async () => {
+  const me = await (await call('/rest/api/2/myself', 'sct_rw_media')).json();
+  const url: string = me.avatarUrls['48x48'];
+  expect(url).toMatch(new RegExp(`^${base}/media/[0-9a-f]{32}$`));
+  expect(JSON.stringify(me)).not.toContain('shortcut.com');
   const logged = events.length;
-  const img = await call('/avatar/u1');
+  const img = await call(url.slice(base.length));
   expect(img.status).toBe(200);
   expect(img.headers.get('content-type')).toBe('image/png');
   expect(await img.text()).toBe('PNG');
-  expect(iconTokens).toHaveLength(1); // fetched once, by an earlier authenticated request
-  expect(iconTokens[0]).toMatch(/\S/);
-  expect(events).toHaveLength(logged); // not in the request log
-  expect((await call('/avatar/u2')).status).toBe(404);
+  expect(iconTokens).toEqual(['sct_rw_TESTTOKEN']); // fetched once, with the token of the first request that showed it
+  expect((await (await call('/rest/api/2/myself', 'sct_rw_media')).json()).avatarUrls['48x48']).toBe(url);
+  expect(iconTokens).toHaveLength(1);
+  expect(events).toHaveLength(logged + 1); // the image request is not in the log
+  expect((await call('/media/nope')).status).toBe(404);
+});
+
+it('lists preset and user filters as Jira favourites', async () => {
+  const res = await call('/rest/api/2/filter/favourite?expand=jql', 'sct_rw_TESTTOKEN');
+  const filters: { id: string; name: string; jql: string }[] = await res.json();
+  expect(filters.map((f) => [f.id, f.name])).toEqual([
+    ['1', 'My open stories'],
+    ['2', 'Requested by me'],
+    ['3', 'Current sprint'], // Sprint 42 is started
+    ['4', 'WEB: open stories'], // only teams Ada is in
+    ['5', 'Web bugs'],
+  ]);
+  for (const f of filters) expect(() => compileJql(f.jql, lookups)).not.toThrow();
 });
 
 it('tokenAccess', () => {

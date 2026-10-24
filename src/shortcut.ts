@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 const BASE = 'https://api.app.shortcut.com';
 
 export interface Member {
@@ -145,29 +147,38 @@ export function cached<T>(token: string, path: string, ttlMs = 60_000): Promise<
   return value;
 }
 
-const MEDIA = 'https://media.app.shortcut.com/';
 export interface Image {
   type: string;
   bytes: Buffer;
 }
-// Shortcut's avatar URLs need the token, which an <img> in Orca can't send. So while a request with the
-// token is in hand, the proxy fetches the avatars and serves them itself at /avatar/<member id>.
-// ponytail: kept for the life of the process (~20 KB per member with a photo).
-const avatars = new Map<string, { url: string; image: Promise<Image | null> }>();
 
-export function prefetchAvatars(token: string, members: Iterable<Member>): void {
-  for (const m of members) {
-    const url = m.profile.display_icon?.url;
-    if (!url?.startsWith(MEDIA) || avatars.get(m.id)?.url === url) continue;
-    const image = fetch(url, { headers: { 'Shortcut-Token': token } })
-      .then(async (r) =>
-        r.ok ? { type: r.headers.get('content-type') ?? 'application/octet-stream', bytes: Buffer.from(await r.arrayBuffer()) } : null,
-      )
-      .catch(() => null);
-    const entry = { url, image };
-    avatars.set(m.id, entry);
-    void image.then((img) => img || (avatars.get(m.id) === entry && avatars.delete(m.id))); // retry next time
-  }
+// Shortcut's media URLs (avatars, images in descriptions and comments) need the token, which an <img> in
+// Orca can't send. So every one in a response is fetched now, while the token is in hand, and swapped
+// for a link to the proxy, which serves the cached copy without asking for the token.
+const MEDIA_URL = /https:\/\/media\.app\.shortcut\.com\/[^\s"'()<>\\]+/g;
+const MEDIA_LIMIT = 500; // ponytail: oldest-first eviction by count, not bytes; add a byte budget if memory bites
+const media = new Map<string, Promise<Image | null>>();
+
+function fetchMedia(token: string, url: string): Promise<Image | null> {
+  return fetch(url, { headers: { 'Shortcut-Token': token } })
+    .then(async (r) =>
+      r.ok ? { type: r.headers.get('content-type') ?? 'application/octet-stream', bytes: Buffer.from(await r.arrayBuffer()) } : null,
+    )
+    .catch(() => null);
 }
 
-export const avatar = (memberId: string): Promise<Image | null> => avatars.get(memberId)?.image ?? Promise.resolve(null);
+/** Rewrites Shortcut media URLs in `text` to `${origin}/media/<id>` and starts fetching them. */
+export function localMedia(token: string, text: string, origin: string): string {
+  return text.replace(MEDIA_URL, (url) => {
+    const id = createHash('sha256').update(url).digest('hex').slice(0, 32);
+    if (!media.has(id)) {
+      const image = fetchMedia(token, url);
+      media.set(id, image);
+      void image.then((img) => img || (media.get(id) === image && media.delete(id))); // retry next time
+      if (media.size > MEDIA_LIMIT) media.delete(media.keys().next().value!);
+    }
+    return `${origin}/media/${id}`;
+  });
+}
+
+export const mediaFile = (id: string): Promise<Image | null> => media.get(id) ?? Promise.resolve(null);

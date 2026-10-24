@@ -59,11 +59,19 @@ them itself. If a query only uses fields Shortcut can't search (for example only
 sprint name, or a key range), it scans those 500 and **can miss matches**. Add a team, assignee or status condition to
 fix that.
 
+## Saved filters
+
+Shortcut has no saved searches, so Orca's **Jira favourites** (on the Tasks page) come from this app: *My open
+stories*, *Requested by me*, *Current sprint* (while an iteration is running), open stories for each team you're
+in, then your own filters from **Settings → Saved filters**.
+
 ## Not supported
 
-`WAS` / `CHANGED` history searches, `watcher`, saved filters, attachments/images, editing descriptions, and editing
-custom fields other than Priority. Unknown fields, statuses, users or values return a clear 400 error that says what's
-wrong, so you never get silently wrong results.
+`WAS` / `CHANGED` history searches and `watcher`. Unknown fields, statuses, users or values return a clear 400 error
+that says what's wrong, so you never get silently wrong results.
+
+Orca itself has no way to edit descriptions, edit custom fields other than Priority, or upload attachments, so those
+can't be done from Orca. Images in descriptions and comments do show.
 
 ## Copy these
 

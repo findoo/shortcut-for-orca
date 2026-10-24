@@ -27,3 +27,5 @@ td.path { word-break: break-all; }
 .muted { color: var(--muted); }
 #guide table { margin: 8px 0; }
 #guide td, #guide th { font-size: 12px; }
+.filter input.name { width: 14em; }
+.filter input.jql { flex: 1; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }

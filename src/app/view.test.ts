@@ -2,7 +2,7 @@ import { MISSING_TOKEN_MESSAGE } from '../messages.ts';
 import { agoText, rejectedWarning, setupStatus } from './view.ts';
 import type { AppState } from './state.ts';
 
-const base: AppState = { proxy: { state: 'running', port: 8089 }, log: [], launchAtLogin: false };
+const base: AppState = { proxy: { state: 'running', port: 8089 }, log: [], launchAtLogin: false, filters: [] };
 const identity = { name: 'Ada', mention: 'ada', workspace: 'acme', access: 'read-write' as const };
 const ev = (status: number, error?: string) => ({ at: 1000, method: 'GET', path: '/x', status, ms: 1, error });
 

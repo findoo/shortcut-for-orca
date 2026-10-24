@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import jql from '../../docs/jql.md';
 import type { AppApi } from './preload.ts';
+import type { SavedFilter } from '../server.ts';
 import type { AppState } from './state.ts';
 import { rejectedWarning, setupStatus } from './view.ts';
 
@@ -121,9 +122,56 @@ const settings = el(
   el('div', { className: 'row' }, el('label', {}, login, ' Open at login')),
 );
 
+// Saved filters: edited as a local draft, so state updates (every request) don't wipe what's being typed.
+const filterRows = el('div');
+const filterError = el('div', { className: 'err' });
+let filtersLoaded = false;
+
+function filterRow(f: SavedFilter): HTMLElement {
+  const row = el(
+    'div',
+    { className: 'row filter' },
+    el('input', { className: 'name', placeholder: 'Name', value: f.name }),
+    el('input', { className: 'jql', placeholder: 'JQL, e.g. project = WEB AND type = bug', value: f.jql }),
+  );
+  row.append(button('Remove', () => row.remove()));
+  return row;
+}
+
+const draftFilters = (): SavedFilter[] =>
+  Array.from(filterRows.children, (row) => {
+    const inputs = row.querySelectorAll('input');
+    return { name: inputs[0].value, jql: inputs[1].value };
+  });
+
+settings.append(
+  el('h2', { textContent: 'Saved filters' }),
+  el(
+    'div',
+    { className: 'muted' },
+    "Shown in Orca's Tasks page under Jira favourites, after the built-in ones: My open stories, Requested by me, Current sprint (while one is running) and open stories for each of your teams. See the JQL guide for what queries can use.",
+  ),
+  filterRows,
+  el(
+    'div',
+    { className: 'row' },
+    button('Add filter', () => filterRows.append(filterRow({ name: '', jql: '' }))),
+    button('Save filters', () => {
+      void api.setFilters(draftFilters()).then((r) => {
+        filterError.textContent = r.ok ? '' : r.error;
+      });
+    }),
+  ),
+  filterError,
+);
+
 function renderSettings(s: AppState): void {
   if (document.activeElement !== portInput) portInput.value = String(s.proxy.port);
   login.checked = s.launchAtLogin;
+  if (!filtersLoaded) {
+    filtersLoaded = true;
+    filterRows.replaceChildren(...s.filters.map(filterRow));
+  }
 }
 
 // --- Tabs

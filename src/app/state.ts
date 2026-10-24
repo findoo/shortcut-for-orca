@@ -1,5 +1,5 @@
 import { MISSING_TOKEN_MESSAGE } from '../messages.ts';
-import type { Identity, RequestEvent } from '../server.ts';
+import type { Identity, RequestEvent, SavedFilter } from '../server.ts';
 
 export type ProxyStatus =
   | { state: 'starting' | 'running'; port: number }
@@ -11,12 +11,13 @@ export interface AppState {
   lastRequestAt?: number;
   log: RequestEvent[];
   launchAtLogin: boolean;
+  filters: SavedFilter[];
 }
 
 export const LOG_LIMIT = 200;
 
-export function initialState(port: number, launchAtLogin: boolean): AppState {
-  return { proxy: { state: 'starting', port }, log: [], launchAtLogin };
+export function initialState(port: number, launchAtLogin: boolean, filters: SavedFilter[] = []): AppState {
+  return { proxy: { state: 'starting', port }, log: [], launchAtLogin, filters };
 }
 
 export function withRequest(s: AppState, e: RequestEvent): AppState {

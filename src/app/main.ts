@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } from 'elect
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Identity, RequestEvent } from '../server.ts';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, validatePort } from './settings.ts';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, validateFilters, validatePort } from './settings.ts';
 import { initialState, withIdentity, withProxy, withRequest, type AppState } from './state.ts';
 import { startProxy, type RunningProxy } from './proxy.ts';
 
@@ -57,6 +57,7 @@ function guard<A extends unknown[]>(fn: (...a: A) => void) {
 const hooks = {
   onRequest: guard((e: RequestEvent) => update(withRequest(state, e))),
   onIdentity: guard((i: Identity) => update(withIdentity(state, i))),
+  filters: () => state.filters,
 };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -76,7 +77,7 @@ async function applyPort(value: unknown): Promise<{ ok: true } | { ok: false; er
   update(withProxy(state, { state: 'running', port: next.port }));
   await old?.close().catch((err) => console.error('closing old proxy failed:', err));
   try {
-    saveSettings(settingsFile, { port });
+    saveSettings(settingsFile, { port, filters: state.filters });
   } catch (err) {
     // The new proxy keeps running (it is what the user asked for); it just won't survive a restart.
     return { ok: false, error: `Proxy now on port ${port}, but saving the setting failed: ${message(err)}` };
@@ -165,13 +166,24 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     settingsFile = path.join(app.getPath('userData'), 'settings.json');
     const settings = SMOKE ? DEFAULT_SETTINGS : loadSettings(settingsFile);
-    state = initialState(settings.port, app.getLoginItemSettings().openAtLogin);
+    state = initialState(settings.port, app.getLoginItemSettings().openAtLogin, settings.filters);
 
     ipcMain.handle('state:get', () => state);
     ipcMain.handle('settings:port', (_e, port: unknown) => applyPort(port));
     ipcMain.handle('settings:login', (_e, on: unknown) => {
       app.setLoginItemSettings({ openAtLogin: on === true });
       update({ ...state, launchAtLogin: app.getLoginItemSettings().openAtLogin });
+    });
+    ipcMain.handle('settings:filters', (_e, value: unknown) => {
+      const filters = validateFilters(value);
+      if (typeof filters === 'string') return { ok: false, error: filters };
+      try {
+        saveSettings(settingsFile, { port: state.proxy.port, filters });
+      } catch (err) {
+        return { ok: false, error: `Saving failed: ${message(err)}` };
+      }
+      update({ ...state, filters });
+      return { ok: true };
     });
     ipcMain.handle('clipboard:copy', (_e, text: unknown) => {
       if (typeof text === 'string') clipboard.writeText(text);

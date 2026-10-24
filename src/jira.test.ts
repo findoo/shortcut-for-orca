@@ -1,5 +1,5 @@
 import { lookups, stories } from './fixtures.ts';
-import { POINTS_FIELD, SPRINT_FIELD, issue, parseKey, user } from './jira.ts';
+import { POINTS_FIELD, SPRINT_FIELD, issue, parseKey } from './jira.ts';
 
 describe('issue', () => {
   it('maps a story to the Jira fields Orca reads', () => {
@@ -18,13 +18,6 @@ describe('issue', () => {
       [SPRINT_FIELD]: [{ name: 'Sprint 42', state: 'active' }],
       [POINTS_FIELD]: 3,
     });
-  });
-
-  it('points avatars at the proxy, never at Shortcut', () => {
-    const base = { avatarBase: 'http://127.0.0.1:8089' };
-    expect(user(lookups.members.get('u1'), base)).toHaveProperty('avatarUrls', { '48x48': 'http://127.0.0.1:8089/avatar/u1' });
-    expect(user(lookups.members.get('u2'), base)).not.toHaveProperty('avatarUrls'); // no photo in Shortcut
-    expect(user(lookups.members.get('u1'), {})).not.toHaveProperty('avatarUrls');
   });
 
   it('parses story keys', () => {

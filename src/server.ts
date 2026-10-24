@@ -18,9 +18,9 @@ import { JqlError, compileJql } from './jql.ts';
 import { MISSING_TOKEN_MESSAGE } from './messages.ts';
 import {
   ShortcutError,
-  avatar,
   cached,
-  prefetchAvatars,
+  localMedia,
+  mediaFile,
   sc,
   type Comment,
   type CustomField,
@@ -37,7 +37,6 @@ import {
 export { MISSING_TOKEN_MESSAGE };
 
 let workspaceSlug = process.env.SHORTCUT_WORKSPACE ?? '';
-let avatarBase = ''; // this proxy's own origin, as Orca reaches it
 
 class HttpError extends Error {
   readonly status: number;
@@ -52,6 +51,7 @@ type Json = any;
 
 interface Ctx {
   token: () => string;
+  hooks: ProxyHooks;
   params: string[];
   url: URL;
   body: Json;
@@ -92,7 +92,6 @@ async function lookups(token: string, stories: Story[] = []): Promise<Lookups> {
     customFields: fields.filter((f) => f.enabled !== false),
     priority: fields.find((f) => f.canonical_name === 'priority' && f.enabled !== false),
     epicNames: new Map(epics.flatMap((e) => (e ? [[e.id, e.name] as const] : []))),
-    avatarBase,
   };
 }
 
@@ -153,7 +152,7 @@ function searchUsers(l: Lookups, url: URL) {
         ),
     )
     .slice(0, max)
-    .map((m) => user(m, l));
+    .map((m) => user(m));
 }
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
@@ -172,7 +171,7 @@ const routes: [string, RegExp, Handler][] = [
     /^\/rest\/api\/2\/myself$/,
     async ({ token }) => {
       const l = await lookups(token());
-      return user(l.members.get(l.me.id), l) ?? { name: l.me.id, key: l.me.id, displayName: l.me.name };
+      return user(l.members.get(l.me.id)) ?? { name: l.me.id, key: l.me.id, displayName: l.me.name };
     },
   ],
   [
@@ -201,7 +200,29 @@ const routes: [string, RegExp, Handler][] = [
         .sort((a, b) => a.position - b.position)
         .map((v) => ({ id: v.id, name: v.value })) ?? [],
   ],
-  ['GET', /^\/rest\/api\/2\/filter\/favourite$/, async () => []],
+  [
+    'GET',
+    /^\/rest\/api\/2\/filter\/favourite$/,
+    // Shortcut has no saved searches, so Orca's "Jira favourites" are presets plus the user's own from the app.
+    async ({ token, hooks }) => {
+      const l = await lookups(token());
+      const teams = l.groups.filter((g) => !g.archived && g.member_ids?.includes(l.me.id));
+      const filters: SavedFilter[] = [
+        { name: 'My open stories', jql: 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC' },
+        { name: 'Requested by me', jql: 'reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC' },
+        // Only when there is one: many workspaces don't use iterations, and an always-empty favourite is noise.
+        ...([...l.iterations.values()].some((i) => i.status === 'started')
+          ? [{ name: 'Current sprint', jql: 'sprint in openSprints() AND statusCategory != Done ORDER BY rank' }]
+          : []),
+        ...teams.map((g) => ({
+          name: `${g.name}: open stories`,
+          jql: `project = "${project(g).key}" AND statusCategory != Done ORDER BY updated DESC`,
+        })),
+        ...(hooks.filters?.() ?? []),
+      ];
+      return filters.map((f, i) => ({ id: String(i + 1), name: f.name, jql: f.jql, favourite: true }));
+    },
+  ],
   [
     'POST',
     /^\/rest\/api\/2\/search$/,
@@ -432,9 +453,15 @@ export interface Identity {
   workspace: string;
   access: TokenAccess;
 }
+export interface SavedFilter {
+  name: string;
+  jql: string;
+}
 export interface ProxyHooks {
   onRequest?(e: RequestEvent): void;
   onIdentity?(i: Identity): void;
+  /** The user's own saved filters, listed after the presets in Orca's "Jira favourites". */
+  filters?(): SavedFilter[];
 }
 
 export function tokenAccess(token: string): TokenAccess {
@@ -477,6 +504,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
   const at = Date.now();
   const method = req.method ?? 'GET';
   let path = req.url ?? '/';
+  let origin = '';
   let token: string | undefined;
   let shortcutForbidden = false;
   let reply: Reply;
@@ -486,10 +514,10 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
     // Blocks DNS-rebinding: a web page can't reach this proxy under a hostname it controls.
     if (!LOCAL_HOSTS.has(url.hostname)) throw new HttpError(403, 'Forbidden host.');
     const trimmed = path.replace(/\/+$/, '');
-    avatarBase = url.origin;
-    // Images for Orca's <img> tags: no token, and kept out of the request log.
-    if (method === 'GET' && trimmed.startsWith('/avatar/')) {
-      const img = await avatar(decodeURIComponent(trimmed.slice('/avatar/'.length)));
+    origin = url.origin;
+    // Images for Orca's <img> tags (see localMedia): no token, and kept out of the request log.
+    if (method === 'GET' && trimmed.startsWith('/media/')) {
+      const img = await mediaFile(trimmed.slice('/media/'.length));
       if (img) res.writeHead(200, { 'Content-Type': img.type, 'Cache-Control': 'max-age=3600' }).end(img.bytes);
       else res.writeHead(404).end();
       return;
@@ -501,6 +529,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
         const body = method === 'GET' ? undefined : await readJson(req);
         const result = (await handler({
           token: () => (token = tokenFrom(req)),
+          hooks,
           params: match.slice(1).map(decodeURIComponent),
           url,
           body,
@@ -518,22 +547,19 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
     reply = { status, body: { errorMessages: [e instanceof Error ? e.message : String(e)], errors: {} } };
   }
   // Resolved before replying so identity is visible by the time the client has its response.
-  if (token && reply.status < 400) {
-    await emitIdentity(hooks, token, tokenAccess(token));
-    // Started before replying, so the images are on their way by the time Orca asks for them.
-    prefetchAvatars(token, (await lookups(token).catch(() => null))?.members.values() ?? []);
-  }
+  if (token && reply.status < 400) await emitIdentity(hooks, token, tokenAccess(token));
   else if (token && shortcutForbidden) {
     readOnlyTokens.add(tokenId(token));
     await emitIdentity(hooks, token, 'read-only');
   }
-  respond(res, reply);
+  const t = token;
+  respond(res, reply, t ? (json) => localMedia(t, json, origin) : undefined);
   const error = reply.status >= 400 ? (reply.body as { errorMessages?: string[] }).errorMessages?.[0] : undefined;
   hooks.onRequest?.({ at, method, path, status: reply.status, ms: Math.round(performance.now() - start), ...(error && { error }) });
 }
 
-function respond(res: ServerResponse, { status, body, location }: Reply) {
+function respond(res: ServerResponse, { status, body, location }: Reply, rewrite = (json: string) => json) {
   if (location) res.writeHead(status, { Location: location }).end();
   else if (body === null || body === undefined) res.writeHead(204).end();
-  else res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+  else res.writeHead(status, { 'Content-Type': 'application/json' }).end(rewrite(JSON.stringify(body)));
 }
