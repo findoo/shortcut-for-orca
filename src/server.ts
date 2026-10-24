@@ -487,7 +487,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
         })) as Json;
         if (result?.redirect) return { status: 302, location: result.redirect };
         if (result?.status && result.body) return { status: result.status, body: result.body };
-        return { status: 200, body: result };
+        return result === null || result === undefined ? { status: 204 } : { status: 200, body: result };
       }
       throw new HttpError(404, `Not supported by the Shortcut proxy: ${method} ${trimmed}`);
     })();

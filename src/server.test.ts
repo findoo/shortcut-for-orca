@@ -75,6 +75,12 @@ it('marks read-only on Shortcut 403 write', async () => {
   expect(identities.at(-1)).toMatchObject({ name: 'Ada Lovelace', access: 'read-only' });
 });
 
+it('reports 204 no-content responses as 204', async () => {
+  const res = await call('/rest/api/2/issue/SC-1/assignee', 'sct_rw_TESTTOKEN', 'PUT');
+  expect(res.status).toBe(204);
+  expect(events.at(-1)).toMatchObject({ method: 'PUT', path: '/rest/api/2/issue/SC-1/assignee', status: 204 });
+});
+
 it('reports redirects as events without identity', async () => {
   const before = identities.length;
   const res = await call('/browse/SC-1');
