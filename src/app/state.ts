@@ -1,3 +1,4 @@
+import { MISSING_TOKEN_MESSAGE } from '../messages.ts';
 import type { Identity, RequestEvent } from '../server.ts';
 
 export type ProxyStatus =
@@ -19,7 +20,7 @@ export function initialState(port: number, launchAtLogin: boolean): AppState {
 }
 
 export function withRequest(s: AppState, e: RequestEvent): AppState {
-  const missingAuth = e.status === 401 && !!e.error?.includes('Shortcut API token');
+  const missingAuth = e.status === 401 && e.error === MISSING_TOKEN_MESSAGE;
   return {
     ...s,
     log: [e, ...s.log].slice(0, LOG_LIMIT),

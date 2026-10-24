@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { lookups, stories } from './fixtures.ts';
-import { handle, tokenAccess, type Identity, type RequestEvent } from './server.ts';
+import { MISSING_TOKEN_MESSAGE, handle, tokenAccess, type Identity, type RequestEvent } from './server.ts';
 
 const realFetch = global.fetch; // `call` talks to the proxy for real; Shortcut is mocked
 const events: RequestEvent[] = [];
@@ -55,7 +55,8 @@ it('emits a 401 event without auth', async () => {
   expect(res.status).toBe(401);
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({ method: 'GET', path: '/rest/api/2/myself', status: 401 });
-  expect(events[0].error).toMatch(/Shortcut API token/);
+  expect(events[0].error).toBe(MISSING_TOKEN_MESSAGE);
+  expect(Number.isInteger(events[0].ms)).toBe(true);
   expect(identities).toHaveLength(0);
 });
 
@@ -89,8 +90,21 @@ it('reports redirects as events without identity', async () => {
   expect(identities).toHaveLength(before);
 });
 
-it('never leaks the token', () => {
-  expect(JSON.stringify([events, identities])).not.toContain('TESTTOKEN');
+it('keeps read-only sticky for tokens that cannot write', async () => {
+  forbidWrites = true;
+  await call('/rest/api/2/issue/SC-1/comment', 'TESTTOKEN-STICKY', 'POST');
+  forbidWrites = false;
+  const res = await call('/rest/api/2/myself', 'TESTTOKEN-STICKY');
+  expect(res.status).toBe(200);
+  expect(identities.at(-1)?.access).toBe('read-only');
+  expect(identities.filter((i) => i.access === 'unknown')).toEqual([]);
+});
+
+it('never leaks the token', async () => {
+  await call('/rest/api/2/myself', 'sct_rw_LEAKCHECK');
+  await call('/rest/api/2/myself', 'LEAKCHECK-UUID');
+  expect(events.length + identities.length).toBeGreaterThan(0);
+  expect(JSON.stringify([events, identities])).not.toContain('LEAKCHECK');
 });
 
 it('tokenAccess', () => {

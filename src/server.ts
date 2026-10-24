@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   ISSUE_TYPES,
@@ -14,6 +15,7 @@ import {
   type Lookups,
 } from './jira.ts';
 import { JqlError, compileJql } from './jql.ts';
+import { MISSING_TOKEN_MESSAGE } from './messages.ts';
 import {
   ShortcutError,
   cached,
@@ -29,6 +31,8 @@ import {
   type StoryCustomField,
   type Workflow,
 } from './shortcut.ts';
+
+export { MISSING_TOKEN_MESSAGE };
 
 let workspaceSlug = process.env.SHORTCUT_WORKSPACE ?? '';
 
@@ -58,7 +62,7 @@ function tokenFrom(req: IncomingMessage): string {
     const password = decoded.slice(decoded.indexOf(':') + 1);
     if (password) return password;
   }
-  throw new HttpError(401, 'Use your Shortcut API token as the Jira personal access token.');
+  throw new HttpError(401, MISSING_TOKEN_MESSAGE);
 }
 
 async function lookups(token: string, stories: Story[] = []): Promise<Lookups> {
@@ -434,9 +438,13 @@ export function tokenAccess(token: string): TokenAccess {
 }
 
 const lastIdentity = new WeakMap<ProxyHooks, string>();
+// Tokens Shortcut refused a write for. Keyed by hash so the token itself is never kept.
+const readOnlyTokens = new Set<string>();
+const tokenId = (token: string) => createHash('sha256').update(token).digest('hex');
 
 async function emitIdentity(hooks: ProxyHooks, token: string, access: TokenAccess) {
   if (!hooks.onIdentity) return;
+  if (readOnlyTokens.has(tokenId(token))) access = 'read-only';
   try {
     const l = await lookups(token);
     const identity: Identity = {
@@ -499,10 +507,13 @@ export async function handle(req: IncomingMessage, res: ServerResponse, hooks: P
   }
   // Resolved before replying so identity is visible by the time the client has its response.
   if (token && reply.status < 400) await emitIdentity(hooks, token, tokenAccess(token));
-  else if (token && shortcutForbidden) await emitIdentity(hooks, token, 'read-only');
+  else if (token && shortcutForbidden) {
+    readOnlyTokens.add(tokenId(token));
+    await emitIdentity(hooks, token, 'read-only');
+  }
   respond(res, reply);
   const error = reply.status >= 400 ? (reply.body as { errorMessages?: string[] }).errorMessages?.[0] : undefined;
-  hooks.onRequest?.({ at, method, path, status: reply.status, ms: performance.now() - start, ...(error && { error }) });
+  hooks.onRequest?.({ at, method, path, status: reply.status, ms: Math.round(performance.now() - start), ...(error && { error }) });
 }
 
 function respond(res: ServerResponse, { status, body, location }: Reply) {

@@ -1,3 +1,4 @@
+import { MISSING_TOKEN_MESSAGE } from '../messages.ts';
 import type { RequestEvent } from '../server.ts';
 import { LOG_LIMIT, initialState, withRequest } from './state.ts';
 
@@ -12,7 +13,7 @@ describe('state', () => {
     expect(s.log[0].at).toBe(249);
   });
   it('ignores missing-auth 401 for lastRequestAt', () => {
-    const s = withRequest(initialState(8089, false), ev({ status: 401, error: 'Use your Shortcut API token as the Jira personal access token.' }));
+    const s = withRequest(initialState(8089, false), ev({ status: 401, error: MISSING_TOKEN_MESSAGE }));
     expect(s.lastRequestAt).toBeUndefined();
     expect(s.log).toHaveLength(1);
   });
