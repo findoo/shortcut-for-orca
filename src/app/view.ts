@@ -9,7 +9,10 @@ export function agoText(at: number, now: number): string {
 
 export function setupStatus(s: AppState, now: number): { line: string; warnings: string[] } {
   const id = s.identity;
-  if (!id) return { line: 'Waiting for Orca to connect…', warnings: [] };
+  const newest = s.log[0];
+  const rejected = newest?.status === 401 && !/Shortcut API token/.test(newest.error ?? '');
+  const rejectedMsg = "Shortcut rejected the token Orca is using. Check it in Orca's Jira settings.";
+  if (!id) return { line: 'Waiting for Orca to connect…', warnings: rejected ? [rejectedMsg] : [] };
   const last = s.lastRequestAt === undefined ? '' : ` · last request ${agoText(s.lastRequestAt, now)}`;
   const warnings: string[] = [];
   if (id.access === 'read-only') {
@@ -17,9 +20,6 @@ export function setupStatus(s: AppState, now: number): { line: string; warnings:
   } else if (id.access === 'unknown') {
     warnings.push("Couldn't verify write access for this token.");
   }
-  const newest = s.log[0];
-  if (newest?.status === 401 && !/Shortcut API token/.test(newest.error ?? '')) {
-    warnings.push("Shortcut rejected the token Orca is using. Check it in Orca's Jira settings.");
-  }
+  if (rejected) warnings.push(rejectedMsg);
   return { line: `Orca connected as ${id.name} · ${id.workspace} · ${id.access} token${last}`, warnings };
 }

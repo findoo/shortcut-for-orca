@@ -19,6 +19,12 @@ describe('setupStatus', () => {
   it('waits when there is no identity', () => {
     expect(setupStatus(base, 0)).toEqual({ line: 'Waiting for Orca to connect…', warnings: [] });
   });
+  it('warns about a rejected token even before any identity is known', () => {
+    const r = setupStatus({ ...base, log: [ev(401, 'Shortcut said no')] }, 0);
+    expect(r.line).toBe('Waiting for Orca to connect…');
+    expect(r.warnings[0]).toMatch(/Shortcut rejected/);
+    expect(setupStatus({ ...base, log: [ev(401, 'Missing Shortcut API token')] }, 0)).toEqual({ line: 'Waiting for Orca to connect…', warnings: [] });
+  });
   it('shows the connected line', () => {
     const s = { ...base, identity, lastRequestAt: 1000 };
     expect(setupStatus(s, 4000).line).toBe('Orca connected as Ada · acme · read-write token · last request 3s ago');
