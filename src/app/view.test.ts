@@ -1,4 +1,5 @@
-import { agoText, setupStatus } from './view.ts';
+import { MISSING_TOKEN_MESSAGE } from '../messages.ts';
+import { agoText, rejectedWarning, setupStatus } from './view.ts';
 import type { AppState } from './state.ts';
 
 const base: AppState = { proxy: { state: 'running', port: 8089 }, log: [], launchAtLogin: false };
@@ -23,7 +24,20 @@ describe('setupStatus', () => {
     const r = setupStatus({ ...base, log: [ev(401, 'Shortcut said no')] }, 0);
     expect(r.line).toBe('Waiting for Orca to connect…');
     expect(r.warnings[0]).toMatch(/Shortcut rejected/);
-    expect(setupStatus({ ...base, log: [ev(401, 'Missing Shortcut API token')] }, 0)).toEqual({ line: 'Waiting for Orca to connect…', warnings: [] });
+    expect(setupStatus({ ...base, log: [ev(401, MISSING_TOKEN_MESSAGE)] }, 0)).toEqual({ line: 'Waiting for Orca to connect…', warnings: [] });
+  });
+  it('shows a proxy error instead of waiting', () => {
+    const s: AppState = { ...base, proxy: { state: 'error', port: 8089, message: 'listen EADDRINUSE' } };
+    expect(setupStatus(s, 0)).toEqual({
+      line: 'Not running on port 8089: listen EADDRINUSE',
+      warnings: ['Change the port in Settings, then use the new address in Orca.'],
+    });
+    expect(setupStatus({ ...s, identity }, 0).line).toMatch(/^Not running on port 8089/);
+  });
+  it('rejectedWarning is only set for a Shortcut 401', () => {
+    expect(rejectedWarning({ ...base, log: [ev(401, 'nope')] })).toMatch(/Shortcut rejected/);
+    expect(rejectedWarning({ ...base, log: [ev(401, MISSING_TOKEN_MESSAGE)] })).toBeUndefined();
+    expect(rejectedWarning(base)).toBeUndefined();
   });
   it('shows the connected line', () => {
     const s = { ...base, identity, lastRequestAt: 1000 };
@@ -41,7 +55,7 @@ describe('setupStatus', () => {
   it('warns when Shortcut rejected the token (401 not about a missing token)', () => {
     const rejected = { ...base, identity, log: [ev(401, 'Shortcut said no')] };
     expect(setupStatus(rejected, 0).warnings[0]).toMatch(/Shortcut rejected/);
-    const missing = { ...base, identity, log: [ev(401, 'Missing Shortcut API token')] };
+    const missing = { ...base, identity, log: [ev(401, MISSING_TOKEN_MESSAGE)] };
     expect(setupStatus(missing, 0).warnings).toEqual([]);
     expect(setupStatus({ ...base, identity, log: [ev(401), ev(200)] }, 0).warnings[0]).toMatch(/Shortcut rejected/);
     expect(setupStatus({ ...base, identity, log: [ev(200), ev(401, 'x')] }, 0).warnings).toEqual([]);

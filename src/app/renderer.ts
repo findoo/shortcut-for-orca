@@ -2,7 +2,7 @@ import { marked } from 'marked';
 import jql from '../../docs/jql.md';
 import type { AppApi } from './preload.ts';
 import type { AppState } from './state.ts';
-import { setupStatus } from './view.ts';
+import { rejectedWarning, setupStatus } from './view.ts';
 
 declare global {
   interface Window {
@@ -44,8 +44,8 @@ const setup = el(
       {},
       el('strong', { textContent: 'Connect Orca' }),
       el('div', {}, 'In Orca: Settings → Integrations → Jira → ', el('strong', { textContent: 'Self-hosted' }), ' → ', el('strong', { textContent: 'Personal access token' }), '.'),
-      el('div', { className: 'row' }, 'Base URL ', baseUrl, button('Copy', () => void api.copy(baseUrl.textContent ?? ''))),
-      el('div', {}, 'Paste your Shortcut token as the Personal access token.'),
+      el('div', { className: 'row' }, 'Jira site URL ', baseUrl, button('Copy', () => void api.copy(baseUrl.textContent ?? ''))),
+      el('div', {}, 'Paste your Shortcut token as the Jira personal access token.'),
     ),
     el('li', {}, el('strong', { textContent: 'Check the connection' }), statusLine, warnings),
   ),
@@ -60,12 +60,14 @@ function renderSetup(s: AppState): void {
 
 // --- Status
 const proxyLine = el('div', { className: 'status' });
+const statusWarning = el('div');
 const logBody = el('tbody');
 const status = el(
   'section',
   {},
   el('h1', { textContent: 'Status' }),
   proxyLine,
+  statusWarning,
   el('h2', { textContent: 'Requests' }),
   el('table', {}, el('thead', {}, el('tr', {}, ...['Time', 'Method', 'Path', 'Status', 'ms', 'Error'].map((h) => el('th', { textContent: h })))), logBody),
 );
@@ -74,6 +76,8 @@ function renderStatus(s: AppState): void {
   const p = s.proxy;
   proxyLine.className = p.state === 'error' ? 'status err' : 'status';
   proxyLine.textContent = p.state === 'running' ? `Running on port ${p.port}` : p.state === 'starting' ? `Starting on port ${p.port}…` : p.state === 'error' ? `Not running on port ${p.port}: ${p.message}` : '';
+  const w = rejectedWarning(s);
+  statusWarning.replaceChildren(...(w ? [el('div', { className: 'warn', textContent: w })] : []));
   // textContent only: paths and errors come from the network.
   logBody.replaceChildren(
     ...s.log.map((e) =>

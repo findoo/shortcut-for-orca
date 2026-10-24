@@ -68,7 +68,8 @@ function createWindow(): void {
     width: 920,
     height: 680,
     title: 'Shortcut for Orca',
-    show: !SMOKE,
+    // Launch at login starts quietly in the dock; clicking the dock icon shows the window.
+    show: !SMOKE && !app.getLoginItemSettings().wasOpenedAtLogin,
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -106,7 +107,7 @@ async function checkWindow(w: BrowserWindow): Promise<boolean> {
     );
     if (!text) await new Promise((r) => setTimeout(r, 100));
   }
-  const expected = ['Setup', 'Status', 'JQL guide', 'Settings', 'http://localhost:8089', 'Waiting for Orca to connect', 'How queries run'];
+  const expected = ['Setup', 'Status', 'JQL guide', 'Settings', 'http://localhost:8089', 'Jira site URL', 'Jira personal access token', 'Waiting for Orca to connect', 'How queries run'];
   let ok = true;
   for (const want of expected) {
     const found = text.includes(want);
