@@ -1,0 +1,28 @@
+{
+  "name": "shortcut-for-orca",
+  "private": true,
+  "license": "MIT",
+  "repository": "github:findoo/shortcut-for-orca",
+  "author": "findoo",
+  "description": "Local Jira Server API facade over Shortcut, so Orca's Jira integration works with Shortcut.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "typecheck": "tsc",
+    "lint": "eslint .",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.15",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}
