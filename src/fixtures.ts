@@ -1,11 +1,13 @@
 import type { Lookups } from './jira.ts';
 import type { Member, Story } from './shortcut.ts';
 
-const member = (id: string, name: string, mention: string, email: string): Member => ({
+const member = (id: string, name: string, mention: string, email: string, icon?: string): Member => ({
   id,
   disabled: false,
-  profile: { name, mention_name: mention, email_address: email, deactivated: false },
+  profile: { name, mention_name: mention, email_address: email, deactivated: false, display_icon: icon ? { url: icon } : null },
 });
+
+export const ADA_ICON = 'https://media.app.shortcut.com/api/attachments/user-icons/ada.png';
 
 const priority = {
   id: 'pf',
@@ -21,7 +23,7 @@ const priority = {
 export const lookups: Lookups = {
   me: { id: 'u1', mention_name: 'ada', name: 'Ada', workspace2: { url_slug: 'acme', default_workflow_id: 1 } },
   members: new Map([
-    ['u1', member('u1', 'Ada Lovelace', 'ada', 'ada@example.com')],
+    ['u1', member('u1', 'Ada Lovelace', 'ada', 'ada@example.com', ADA_ICON)],
     ['u2', member('u2', 'Grace Hopper', 'grace', 'grace@example.com')],
   ]),
   groups: [

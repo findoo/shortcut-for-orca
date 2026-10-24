@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { lookups, stories } from './fixtures.ts';
+import { ADA_ICON, lookups, stories } from './fixtures.ts';
 import { MISSING_TOKEN_MESSAGE, handle, tokenAccess, type Identity, type RequestEvent } from './server.ts';
 
 const realFetch = global.fetch; // `call` talks to the proxy for real; Shortcut is mocked
@@ -12,7 +12,13 @@ let forbidWrites = false;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
-function shortcut(url: string, method: string): Response {
+const iconTokens: string[] = [];
+
+function shortcut(url: string, method: string, headers?: HeadersInit): Response {
+  if (url === ADA_ICON) {
+    iconTokens.push(new Headers(headers).get('Shortcut-Token') ?? '');
+    return new Response(Buffer.from('PNG'), { headers: { 'Content-Type': 'image/png' } });
+  }
   const path = new URL(url).pathname;
   if (method === 'POST' && forbidWrites) return json({ message: 'Forbidden' }, 403);
   const found: Record<string, unknown> = {
@@ -30,7 +36,7 @@ function shortcut(url: string, method: string): Response {
 beforeAll(async () => {
   jest
     .spyOn(global, 'fetch')
-    .mockImplementation(async (input, init) => shortcut(String(input), init?.method ?? 'GET'));
+    .mockImplementation(async (input, init) => shortcut(String(input), init?.method ?? 'GET', init?.headers));
   const hooks = { onRequest: (e: RequestEvent) => events.push(e), onIdentity: (i: Identity) => identities.push(i) };
   server = createServer((q, s) => void handle(q, s, hooks));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -105,6 +111,20 @@ it('never leaks the token', async () => {
   await call('/rest/api/2/myself', 'LEAKCHECK-UUID');
   expect(events.length + identities.length).toBeGreaterThan(0);
   expect(JSON.stringify([events, identities])).not.toContain('LEAKCHECK');
+});
+
+it('serves Shortcut avatars from the proxy without a token', async () => {
+  const me = await (await call('/rest/api/2/myself', 'sct_rw_avatar')).json();
+  expect(me.avatarUrls['48x48']).toBe(`${base}/avatar/u1`);
+  const logged = events.length;
+  const img = await call('/avatar/u1');
+  expect(img.status).toBe(200);
+  expect(img.headers.get('content-type')).toBe('image/png');
+  expect(await img.text()).toBe('PNG');
+  expect(iconTokens).toHaveLength(1); // fetched once, by an earlier authenticated request
+  expect(iconTokens[0]).toMatch(/\S/);
+  expect(events).toHaveLength(logged); // not in the request log
+  expect((await call('/avatar/u2')).status).toBe(404);
 });
 
 it('tokenAccess', () => {

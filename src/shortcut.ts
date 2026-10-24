@@ -144,3 +144,30 @@ export function cached<T>(token: string, path: string, ttlMs = 60_000): Promise<
   cache.set(key, { expires: Date.now() + ttlMs, value });
   return value;
 }
+
+const MEDIA = 'https://media.app.shortcut.com/';
+export interface Image {
+  type: string;
+  bytes: Buffer;
+}
+// Shortcut's avatar URLs need the token, which an <img> in Orca can't send. So while a request with the
+// token is in hand, the proxy fetches the avatars and serves them itself at /avatar/<member id>.
+// ponytail: kept for the life of the process (~20 KB per member with a photo).
+const avatars = new Map<string, { url: string; image: Promise<Image | null> }>();
+
+export function prefetchAvatars(token: string, members: Iterable<Member>): void {
+  for (const m of members) {
+    const url = m.profile.display_icon?.url;
+    if (!url?.startsWith(MEDIA) || avatars.get(m.id)?.url === url) continue;
+    const image = fetch(url, { headers: { 'Shortcut-Token': token } })
+      .then(async (r) =>
+        r.ok ? { type: r.headers.get('content-type') ?? 'application/octet-stream', bytes: Buffer.from(await r.arrayBuffer()) } : null,
+      )
+      .catch(() => null);
+    const entry = { url, image };
+    avatars.set(m.id, entry);
+    void image.then((img) => img || (avatars.get(m.id) === entry && avatars.delete(m.id))); // retry next time
+  }
+}
+
+export const avatar = (memberId: string): Promise<Image | null> => avatars.get(memberId)?.image ?? Promise.resolve(null);

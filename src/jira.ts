@@ -24,6 +24,8 @@ export interface Lookups {
   customFields: CustomField[];
   priority?: CustomField;
   epicNames: Map<number, string>;
+  /** Origin the proxy serves /avatar/<member id> from; no avatars without it. */
+  avatarBase?: string;
 }
 
 export const toKey = (id: number) => `SC-${id}`;
@@ -48,9 +50,9 @@ export function project(g: Group | undefined) {
     : { id: 'none', key: 'SC', name: 'No team' };
 }
 
-export function user(m: Member | undefined, fallbackId?: string | null) {
+export function user(m: Member | undefined, l: Pick<Lookups, 'avatarBase'>, fallbackId?: string | null) {
   if (!m) return fallbackId ? { name: fallbackId, key: fallbackId, displayName: 'Unknown' } : null;
-  const avatar = m.profile.display_icon?.url;
+  const avatar = l.avatarBase && m.profile.display_icon ? `${l.avatarBase}/avatar/${encodeURIComponent(m.id)}` : undefined;
   return {
     name: m.id,
     key: m.id,
@@ -95,8 +97,8 @@ export function issue(s: Story, l: Lookups) {
       project: project(l.groups.find((g) => g.id === s.group_id)),
       issuetype: { id: s.story_type, name: typeName(s.story_type), subtask: false },
       status: status(l.states.get(s.workflow_state_id)),
-      assignee: s.owner_ids[0] ? user(l.members.get(s.owner_ids[0]), s.owner_ids[0]) : null,
-      reporter: user(l.members.get(s.requested_by_id), s.requested_by_id),
+      assignee: s.owner_ids[0] ? user(l.members.get(s.owner_ids[0]), l, s.owner_ids[0]) : null,
+      reporter: user(l.members.get(s.requested_by_id), l, s.requested_by_id),
       priority: pri ? { id: pri.value_id, name: priName ?? pri.value ?? 'Priority' } : null,
       labels: s.labels.map((x) => x.name),
       created: s.created_at,
@@ -113,6 +115,6 @@ export function issue(s: Story, l: Lookups) {
 }
 
 export function comment(c: Comment, l: Lookups) {
-  const author = c.author_id ? user(l.members.get(c.author_id), c.author_id) : null;
+  const author = c.author_id ? user(l.members.get(c.author_id), l, c.author_id) : null;
   return { id: String(c.id), body: c.text ?? '', created: c.created_at, updated: c.updated_at, author };
 }
