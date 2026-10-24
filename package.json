@@ -13,16 +13,22 @@
     "start": "node src/cli.ts",
     "typecheck": "tsc",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "build": "node scripts/build.mjs",
+    "app": "pnpm build && electron .",
+    "app:smoke": "pnpm build && SMOKE=1 electron ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
+    "electron": "^45.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
     "jest": "^30.5.2",
     "ts-jest": "^29.4.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.0"
-  }
+  },
+  "main": "dist/main.cjs"
 }

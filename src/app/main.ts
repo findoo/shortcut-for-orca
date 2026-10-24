@@ -1,0 +1,141 @@
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import path from 'node:path';
+import type { Identity, RequestEvent } from '../server.ts';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, validatePort } from './settings.ts';
+import { initialState, withIdentity, withProxy, withRequest, type AppState } from './state.ts';
+import { startProxy, type RunningProxy } from './proxy.ts';
+
+const SMOKE = process.env.SMOKE === '1';
+const EXTERNAL = [/^https:\/\/app\.shortcut\.com\//, /^https:\/\/github\.com\/findoo\//];
+
+let win: BrowserWindow | undefined;
+let proxy: RunningProxy | undefined; // the one proxy that has not been closed yet
+let state: AppState;
+let settingsFile: string;
+let quitting = false;
+let smokeDone = false;
+
+function update(next: AppState): void {
+  state = next;
+  app.dock?.setBadge(state.proxy.state === 'error' ? '!' : '');
+  if (win && !win.isDestroyed()) win.webContents.send('state:changed', state);
+}
+
+// Hook callbacks run inside request handling: never let them throw into it.
+function guard<A extends unknown[]>(fn: (...a: A) => void) {
+  return (...a: A) => {
+    try {
+      fn(...a);
+    } catch (err) {
+      console.error('hook failed:', err);
+    }
+  };
+}
+
+const hooks = {
+  onRequest: guard((e: RequestEvent) => update(withRequest(state, e))),
+  onIdentity: guard((i: Identity) => update(withIdentity(state, i))),
+};
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+async function applyPort(value: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const port = validatePort(value);
+  if (typeof port === 'string') return { ok: false, error: port };
+  if (proxy && proxy.port === port && state.proxy.state === 'running') return { ok: true };
+  let next: RunningProxy;
+  try {
+    next = await startProxy(port, hooks);
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+  const old = proxy;
+  proxy = next;
+  update(withProxy(state, { state: 'running', port: next.port }));
+  await old?.close().catch((err) => console.error('closing old proxy failed:', err));
+  try {
+    saveSettings(settingsFile, { port });
+  } catch (err) {
+    // The new proxy keeps running (it is what the user asked for); it just won't survive a restart.
+    return { ok: false, error: `Proxy now on port ${port}, but saving the setting failed: ${message(err)}` };
+  }
+  return { ok: true };
+}
+
+function createWindow(): void {
+  win = new BrowserWindow({
+    width: 920,
+    height: 680,
+    title: 'Shortcut for Orca',
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
+  });
+  win.on('close', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win?.hide();
+  });
+  void win.loadFile(path.join(__dirname, 'index.html'));
+}
+
+function showWindow(): void {
+  if (!win || win.isDestroyed()) return createWindow();
+  win.show();
+  win.focus();
+}
+
+async function smoke(): Promise<void> {
+  if (state.proxy.state === 'running') {
+    await fetch(`http://127.0.0.1:${state.proxy.port}/rest/api/2/myself`).catch(() => {});
+  }
+  smokeDone = true;
+  console.log(JSON.stringify(state));
+  app.exit(state.proxy.state === 'running' && state.log.length === 1 ? 0 : 1);
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', showWindow);
+  app.on('activate', showWindow);
+  app.on('before-quit', () => {
+    quitting = true;
+    const p = proxy;
+    proxy = undefined;
+    void p?.close().catch(() => {});
+  });
+  app.on('window-all-closed', () => {}); // stay alive in the dock; the proxy keeps serving
+
+  void app.whenReady().then(async () => {
+    settingsFile = path.join(app.getPath('userData'), 'settings.json');
+    const settings = SMOKE ? DEFAULT_SETTINGS : loadSettings(settingsFile);
+    state = initialState(settings.port, app.getLoginItemSettings().openAtLogin);
+
+    ipcMain.handle('state:get', () => state);
+    ipcMain.handle('settings:port', (_e, port: unknown) => applyPort(port));
+    ipcMain.handle('settings:login', (_e, on: unknown) => {
+      app.setLoginItemSettings({ openAtLogin: on === true });
+      update({ ...state, launchAtLogin: app.getLoginItemSettings().openAtLogin });
+    });
+    ipcMain.handle('clipboard:copy', (_e, text: unknown) => {
+      if (typeof text === 'string') clipboard.writeText(text);
+    });
+    ipcMain.handle('open:external', async (_e, url: unknown) => {
+      if (typeof url === 'string' && EXTERNAL.some((re) => re.test(url))) await shell.openExternal(url);
+    });
+
+    if (SMOKE) setTimeout(() => !smokeDone && app.exit(1), 15000).unref();
+    else createWindow();
+    try {
+      proxy = await startProxy(settings.port, hooks);
+      update(withProxy(state, { state: 'running', port: proxy.port }));
+    } catch (err) {
+      update(withProxy(state, { state: 'error', port: settings.port, message: message(err) }));
+    }
+    if (SMOKE) await smoke();
+  });
+}

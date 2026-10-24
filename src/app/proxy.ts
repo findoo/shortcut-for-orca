@@ -10,7 +10,10 @@ export interface RunningProxy {
 export function startProxy(port: number, hooks: ProxyHooks): Promise<RunningProxy> {
   const server = createServer((q, s) => void handle(q, s, hooks));
   return new Promise((resolve, reject) => {
-    server.once('error', (err: NodeJS.ErrnoException) => {
+    let listening = false;
+    // Stays attached for the server's lifetime: an unhandled 'error' event would crash the Electron main process.
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (listening) return console.error('proxy server error:', err);
       reject(
         err.code === 'EADDRINUSE'
           ? new Error(`Port ${port} is already in use. Quit whatever is using it, or pick another port in Settings.`)
@@ -18,6 +21,7 @@ export function startProxy(port: number, hooks: ProxyHooks): Promise<RunningProx
       );
     });
     server.listen(port, '127.0.0.1', () => {
+      listening = true;
       resolve({
         port: (server.address() as AddressInfo).port,
         close: () =>
