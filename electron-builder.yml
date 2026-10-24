@@ -1,0 +1,16 @@
+appId: com.findoo.shortcut-for-orca
+productName: Shortcut for Orca
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  identity: "-"
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+publish:
+  provider: github
+  owner: findoo
+  repo: shortcut-for-orca

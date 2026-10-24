@@ -3,3 +3,4 @@ allowBuilds:
   unrs-resolver: false
   electron: true
   esbuild: true
+  electron-winstaller: false

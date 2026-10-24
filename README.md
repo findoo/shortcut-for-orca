@@ -1,15 +1,38 @@
-# Shortcut → Jira proxy for Orca
+# Shortcut for Orca
 
-Orca has no Shortcut integration, but its Jira integration supports self-hosted Jira (Server / Data Center).
-This is a local server that speaks the subset of the Jira Server REST API Orca uses and calls Shortcut live.
-No sync and no database: reads and writes go straight to Shortcut.
+A small macOS app that lets [Orca](https://github.com/stablyai/orca)'s Jira integration work with Shortcut. It runs a local server that speaks the subset of the Jira Server REST API Orca uses and calls Shortcut live. No sync and no database: reads and writes go straight to Shortcut.
+
+## Download
+
+Get the latest `.dmg` from [Releases](https://github.com/findoo/shortcut-for-orca/releases): `arm64` for Apple Silicon, `x64` for Intel Macs.
+
+## Install
+
+Drag **Shortcut for Orca** to Applications. You may need temporary admin access to copy it into Applications and open it the first time.
+
+## First launch
+
+The app is unsigned, so macOS blocks it the first time. On macOS 15+, open System Settings → Privacy & Security and click **Open Anyway**. Or run:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Shortcut for Orca.app"
+```
+
+Then follow the **Setup** tab in the app.
+
+## Developer notes
 
 ## Run
 
 ```sh
 pnpm install
-pnpm start            # http://localhost:8089 (PORT=… to change)
+pnpm start            # headless proxy on http://localhost:8089 (PORT=… to change)
+pnpm app              # build and launch the Electron app
+pnpm test
+pnpm dist             # unsigned .dmgs in release/ (arm64 + x64), no publish
 ```
+
+Releases: push a tag like `v0.1.0`; the GitHub Actions workflow builds and publishes the `.dmg`s.
 
 ## Connect Orca
 
@@ -26,7 +49,7 @@ The proxy stores nothing. It forwards Orca's token to Shortcut on each request a
 | Jira (Orca)          | Shortcut                                            |
 | -------------------- | --------------------------------------------------- |
 | Issue `SC-123`       | Story 123                                           |
-| Project              | Team (key = mention name, e.g. `WEB`)       |
+| Project              | Team (key = mention name, e.g. `WEB`)               |
 | Status / transitions | Workflow states of the story's workflow             |
 | Status category      | State type (`started` → In Progress, `done` → Done) |
 | Issue type           | Story type (feature / bug / chore)                  |

@@ -1,5 +1,6 @@
 {
   "name": "shortcut-for-orca",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "repository": "github:findoo/shortcut-for-orca",
@@ -16,13 +17,15 @@
     "test": "jest",
     "build": "node scripts/build.mjs",
     "app": "pnpm build && electron .",
-    "app:smoke": "pnpm build && SMOKE=1 electron ."
+    "app:smoke": "pnpm build && SMOKE=1 electron .",
+    "dist": "pnpm build && electron-builder --mac dmg --arm64 --x64 --publish never"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
     "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
     "jest": "^30.5.2",
@@ -31,5 +34,6 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.0"
   },
-  "main": "dist/main.cjs"
+  "main": "dist/main.cjs",
+  "packageManager": "pnpm@12.9.1"
 }
