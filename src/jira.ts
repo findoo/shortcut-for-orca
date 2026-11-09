@@ -92,7 +92,8 @@ export function issue(s: Story, l: Lookups) {
     fields: {
       summary: s.name,
       description: s.description ?? '',
-      project: project(l.groups.find((g) => g.id === s.group_id)),
+      // Orca requires project.key to equal the issue-key prefix; keep the team as the name.
+      project: { ...project(l.groups.find((g) => g.id === s.group_id)), key: 'SC' },
       issuetype: { id: s.story_type, name: typeName(s.story_type), subtask: false },
       status: status(l.states.get(s.workflow_state_id)),
       assignee: s.owner_ids[0] ? user(l.members.get(s.owner_ids[0]), s.owner_ids[0]) : null,

@@ -8,7 +8,7 @@ describe('issue', () => {
     expect(fields).toMatchObject({
       summary: 'Fix avatar crash',
       description: '**md**',
-      project: { id: 'g1', key: 'WEB' },
+      project: { id: 'g1', key: 'SC' },
       issuetype: { id: 'bug', name: 'Bug' },
       status: { id: '10', name: 'In Dev', statusCategory: { key: 'indeterminate' } },
       assignee: { name: 'u1', displayName: 'Ada Lovelace' },
