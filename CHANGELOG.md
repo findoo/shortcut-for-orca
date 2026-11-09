@@ -2,6 +2,12 @@
 
 Each release's notes on GitHub come from its section here.
 
+## 0.2.1 — 2026-11-09
+
+### Fixed
+
+- Creating a worktree from a story in Orca no longer fails with *Linked work item and source context identities must match*. Stories now report `SC` as their Jira project key so it matches the `SC-123` issue key; the team is still the project's name.
+
 ## 0.2.0 — 2026-10-24
 
 ### New
